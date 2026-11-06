@@ -1,0 +1,73 @@
+import unittest
+from unittest.mock import Mock
+
+from monitor import (HOST, QueueActive, decode_state, event_status, fetch,
+                     listing, next_state, should_alert, ticket_url)
+
+
+def grid(name="MÁLAGA CF - FC BARCELONA", when="Date to be confirmed"):
+    return f'''<div class="gridGen"><div class="gFitxaGen" id="gFitxaGen_1">
+    <span class="gTitSpan">{name}</span><span class="dataE">{when}</span>
+    <div class="gBoto"><a href="/en/malaga-barcelona">Purchase tickets</a></div>
+    </div></div>'''
+
+
+class Parsing(unittest.TestCase):
+    def test_match_and_date(self):
+        ev = listing(grid(when="Sunday, 13/12/2026 18:30"))
+        self.assertEqual(ev["when"], "Sunday, 13/12/2026 18:30")
+        self.assertEqual(ev["url"], f"https://{HOST}/en/malaga-barcelona")
+
+    def test_other_games(self):
+        for name in ("MÁLAGA CF - R. RACING CLUB", "MÁLAGA CF - RCD Espanyol de Barcelona",
+                     "MÁLAGA CF - FC Barcelona Femenino", "Málaga - Barcelona Atlètic"):
+            self.assertIsNone(listing(grid(name)))
+        self.assertIsNone(listing(grid(when="13/12/2027 18:30")))
+
+    def test_layout_error_is_not_absence(self):
+        with self.assertRaises(ValueError):
+            listing("<html>Maintenance</html>")
+
+    def test_external_link_rejected(self):
+        with self.assertRaises(ValueError):
+            ticket_url("https://example.org/event")
+
+    def test_sale_states(self):
+        prefix = "<h1>Málaga CF - FC Barcelona</h1>"
+        self.assertEqual(event_status(prefix + '<input name="key"><input name="pin">'), "members")
+        self.assertEqual(event_status(prefix + '<div class="areaLliures">AVAILABLE</div>'), "selection")
+        self.assertEqual(event_status(prefix + '<div class="areaLliures">SOLD OUT</div>'), "sold_out")
+        self.assertEqual(event_status(prefix + '<p>Venta al público general</p>'), "public")
+        self.assertEqual(event_status(prefix + '<p>Entradas: se abrirá venta al público general</p>'), "listed")
+        self.assertEqual(event_status(prefix + '<div style="display:none"><input name="key"><input name="pin"></div>'
+                                      '<div class="areaLliures">AVAILABLE</div>'), "selection")
+
+    def test_wrong_event_is_error(self):
+        with self.assertRaises(ValueError):
+            event_status('<h1>Racing Club</h1><div class="areaLliures">AVAILABLE</div>')
+
+    def test_queue_is_not_absence(self):
+        session = Mock()
+        session.get.return_value.url = "https://queue.koobin.com/"
+        with self.assertRaises(QueueActive):
+            fetch(session, "https://entradas.malagacf.com/")
+
+    def test_state_changes_and_failure_alerts(self):
+        baseline = {"status": "not_listed"}
+        old = next_state({}, baseline)
+        self.assertFalse(should_alert(old, baseline))
+        error = {"status": "error"}
+        self.assertFalse(should_alert(old, error))
+        old = next_state(next_state(old, error), error)
+        self.assertTrue(should_alert(old, error))
+        old = next_state(old, error)
+        self.assertFalse(should_alert(old, error))
+        self.assertTrue(should_alert(old, baseline))
+        self.assertEqual(old["snapshot"], baseline)
+
+    def test_state_roundtrip(self):
+        self.assertEqual(decode_state('text <!-- malaga-ticketing-state:{"failures":2} -->'), {"failures": 2})
+
+
+if __name__ == "__main__":
+    unittest.main()

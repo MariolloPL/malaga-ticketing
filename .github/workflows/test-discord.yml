@@ -1,0 +1,26 @@
+name: Test Discord
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements.txt
+      - name: Send test notification
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          from monitor import discord
+          if not os.environ.get('DISCORD_WEBHOOK_URL'):
+              raise SystemExit('Dodaj secret DISCORD_WEBHOOK_URL')
+          discord('Test monitoringu Málaga CF – FC Barcelona: powiadomienia Discord działają.')
+          PY
