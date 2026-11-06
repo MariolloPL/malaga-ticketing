@@ -226,8 +226,12 @@ def main():
             f.write(content + "\n\nAlerty: GitHub Issue" +
                     (" + Discord" if os.environ.get("DISCORD_WEBHOOK_URL") else " (Discord nieskonfigurowany)") + "\n")
     state = next_state(old, snapshot)
-    if should_alert(old, snapshot):
-        discord(content)
+    state["discord_enabled"] = bool(os.environ.get("DISCORD_WEBHOOK_URL"))
+    new_channel = state["discord_enabled"] and not old.get("discord_enabled")
+    changed = should_alert(old, snapshot)
+    if changed or new_channel:
+        discord(("Monitoring Discord włączony. Aktualny stan:\n\n" if new_channel else "") + content)
+    if changed:
         gh.call("POST", f"/issues/{issue['number']}/comments", json={"body": content})
     if state != old:
         body = content + "\n\nOstatnia zmiana: " + datetime.now(timezone.utc).isoformat() + "\n\n"

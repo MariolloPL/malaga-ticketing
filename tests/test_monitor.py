@@ -1,8 +1,10 @@
+import json
 import unittest
-from unittest.mock import Mock
+from datetime import datetime, timezone
+from unittest.mock import Mock, patch
 
-from monitor import (HOST, QueueActive, decode_state, event_status, fetch,
-                     listing, next_state, should_alert, ticket_url)
+from monitor import (HOST, MARKER, QueueActive, decode_state, event_status, fetch,
+                     listing, main, next_state, should_alert, ticket_url)
 
 
 def grid(name="MÁLAGA CF - FC BARCELONA", when="Date to be confirmed"):
@@ -67,6 +69,23 @@ class Parsing(unittest.TestCase):
 
     def test_state_roundtrip(self):
         self.assertEqual(decode_state('text <!-- malaga-ticketing-state:{"failures":2} -->'), {"failures": 2})
+
+    def test_new_discord_channel_sends_baseline_once(self):
+        snapshot = {"status": "not_listed", "url": "https://entradas.malagacf.com/"}
+        old = {"snapshot": snapshot, "failures": 0}
+        with patch("monitor.GitHub") as github, patch("monitor.observe", return_value=snapshot), \
+                patch("monitor.discord") as send, patch("monitor.Path.write_text"), \
+                patch.dict("os.environ", {"DISCORD_WEBHOOK_URL": "test"}, clear=True), \
+                patch("monitor.datetime") as clock:
+            clock.now.return_value = datetime(2026, 11, 6, tzinfo=timezone.utc)
+            issue = {"number": 1, "body": MARKER + json.dumps(old) + " -->"}
+            github.return_value.issue.return_value = issue
+            main()
+            send.assert_called_once()
+            self.assertIn("Monitoring Discord włączony", send.call_args.args[0])
+            issue["body"] = github.return_value.call.call_args.kwargs["json"]["body"]
+            main()
+            send.assert_called_once()
 
 
 if __name__ == "__main__":

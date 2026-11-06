@@ -50,7 +50,9 @@ Settings → Secrets and variables → Actions → New repository secret.
 
 Wartość to URL webhooka wybranego kanału. Nie wpisuj go do kodu, Issue ani README.
 Bez tego secretu działają alerty w GitHub Issue. Po dodaniu secretu uruchom workflow
-ręcznie. Jeśli chcesz przetestować Discord bez czekania na zmianę strony, uruchom
+ręcznie. Pierwsze uruchomienie z dodanym secretem wyśle potwierdzenie włączenia
+Discorda i aktualny stan, nawet gdy dostępność biletów się nie zmieniła.
+Jeśli chcesz ponownie przetestować Discord bez czekania na zmianę strony, uruchom
 workflow **Test Discord**. Test wysyła jedną wiadomość na skonfigurowany kanał.
 
 Hasło do konta Málaga nie jest potrzebne. Konto zwykłego klienta nie daje ID/PIN socios.
