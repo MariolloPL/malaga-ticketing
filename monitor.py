@@ -13,8 +13,13 @@ from bs4 import BeautifulSoup
 
 HOST = "entradas.malagacf.com"
 URL = f"https://{HOST}/?idioma=EN&act=1"
-TITLE = "Málaga CF – FC Barcelona: monitoring biletów"
-MARKER = "<!-- malaga-ticketing-state:"
+TARGET = os.environ.get("TARGET_MATCH", "barcelona")
+MATCHES = {"barcelona": "Málaga CF – FC Barcelona",
+           "athletic": "Málaga CF – Athletic Club (Bilbao)"}
+MATCH_NAME = MATCHES[TARGET]
+TITLE = MATCH_NAME + ": monitoring biletów"
+MARKER = "<!-- malaga-ticketing-state:" if TARGET == "barcelona" else "<!-- malaga-ticketing-athletic-state:"
+REPORT = "report.json" if TARGET == "barcelona" else "report-athletic.json"
 LABELS = {
     "not_listed": "Meczu nie ma jeszcze na liście sprzedaży",
     "listed": "Mecz pojawił się w ofercie; etap sprzedaży niepotwierdzony",
@@ -43,17 +48,23 @@ def ticket_url(href):
     return url
 
 
-def listing(html):
+def matches_team(name, opponent):
+    n = norm(name)
+    if "malaga" not in n or any(word in n for word in ("femen", "women", "atletic", "juvenil")):
+        return False
+    if opponent == "barcelona":
+        return "barcelona" in n and "espanyol" not in n
+    return bool(re.search(r"\bathletic\b|\bbilbao\b", n))
+
+
+def listing(html, opponent=TARGET):
     soup = BeautifulSoup(html, "html.parser")
     if not soup.select_one(".gridGen, #contingut"):
         raise ValueError("Brak rozpoznanej listy wydarzeń (blokada lub zmiana strony)")
     matches = []
     for card in soup.select("div.gFitxaGen[id^='gFitxaGen_']"):
         name = text(card.select_one(".gTitSpan, .gTitol"))
-        n = norm(name)
-        if not ("malaga" in n and "barcelona" in n) or "espanyol" in n:
-            continue
-        if any(word in n for word in ("femen", "women", "atletic", "juvenil")):
+        if not matches_team(name, opponent):
             continue
         when = text(card.select_one(".dataE"))
         # A URL can contain an obsolete placeholder date: only inspect displayed text.
@@ -65,14 +76,15 @@ def listing(html):
                         "button": text(card.select_one(".gBoto")),
                         "url": ticket_url(link["href"]) if link else URL})
     if len(matches) > 1:
-        raise ValueError("Kilka ofert Málaga–Barcelona; wymagają ręcznej weryfikacji")
+        raise ValueError("Kilka pasujących ofert; wymagają ręcznej weryfikacji")
     return matches[0] if matches else None
 
 
-def event_status(html):
+def event_status(html, opponent=TARGET):
     soup = BeautifulSoup(html, "html.parser")
-    if "barcelona" not in norm(text(soup)):
-        raise ValueError("Strona szczegółów nie potwierdza meczu z Barceloną")
+    headings = [text(n) for n in soup.select("h1, .gTitSpan, .gTitol")]
+    if not any(matches_team(name, opponent) for name in headings):
+        raise ValueError("Nagłówek strony szczegółów nie potwierdza właściwego meczu")
     for node in soup.select("script, style, header, footer, nav, [hidden], [aria-hidden='true']"):
         node.decompose()
     for node in list(soup.select("[style]")):
@@ -128,7 +140,7 @@ def observe(session):
 
 
 def message(snapshot):
-    lines = ["Málaga CF – FC Barcelona", LABELS[snapshot["status"]]]
+    lines = [MATCH_NAME, LABELS[snapshot["status"]]]
     ev = snapshot.get("event", {})
     if ev.get("when"):
         lines.append("Termin wyświetlany przez klub: " + ev["when"])
@@ -218,7 +230,7 @@ def main():
         print("Błąd odczytu:", type(exc).__name__)
         snapshot = {"status": "error", "url": URL}
     print(json.dumps(snapshot, ensure_ascii=False, indent=2))
-    Path("report.json").write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+    Path(REPORT).write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
     content = message(snapshot)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:

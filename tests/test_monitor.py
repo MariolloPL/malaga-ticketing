@@ -26,6 +26,19 @@ class Parsing(unittest.TestCase):
             self.assertIsNone(listing(grid(name)))
         self.assertIsNone(listing(grid(when="13/12/2027 18:30")))
 
+    def test_opponents_are_tracked_separately(self):
+        athletic = grid("MÁLAGA CF - ATHLETIC CLUB", "Date to be confirmed")
+        self.assertIsNone(listing(athletic, "barcelona"))
+        self.assertIsNotNone(listing(athletic, "athletic"))
+        self.assertIsNone(listing(grid(), "athletic"))
+        self.assertIsNotNone(listing(grid("Málaga CF - Athletic Bilbao"), "athletic"))
+        page = '<h1>Málaga CF - Athletic Club</h1><div class="areaLliures">AVAILABLE</div>'
+        self.assertEqual(event_status(page, "athletic"), "selection")
+        with self.assertRaises(ValueError):
+            event_status(page, "barcelona")
+        with self.assertRaises(ValueError):
+            event_status('<h1>Málaga CF - Racing Club</h1><footer>Barcelona</footer>', "barcelona")
+
     def test_layout_error_is_not_absence(self):
         with self.assertRaises(ValueError):
             listing("<html>Maintenance</html>")

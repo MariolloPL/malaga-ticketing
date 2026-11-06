@@ -23,9 +23,17 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
+        id: tests
       - name: Check tickets and notify
         run: python monitor.py
         env:
+          GH_TOKEN: ${{ github.token }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      - name: Check Athletic Club tickets and notify
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        run: python monitor.py
+        env:
+          TARGET_MATCH: athletic
           GH_TOKEN: ${{ github.token }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
       - name: Save result
@@ -33,6 +41,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ticket-status
-          path: report.json
+          path: report*.json
           if-no-files-found: ignore
           retention-days: 7

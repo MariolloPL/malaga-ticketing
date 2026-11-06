@@ -1,6 +1,9 @@
 # Málaga CF – FC Barcelona: monitoring biletów
 
 Monitoring oficjalnej strony https://entradas.malagacf.com/ dla meczu z grudnia 2026.
+Dodany mecz do weryfikacji: Málaga CF – Athletic Club (Bilbao), orientacyjnie
+29 listopada 2026. Oba mecze mają osobne stany, GitHub Issues i alerty Discord.
+Filtr dopasowuje nazwy drużyn; data nie jest wymagana, ponieważ może być niepotwierdzona.
 Potrzeba: 4 bilety (2 dorosłych, dzieci 6 i 8 lat), najlepiej obok siebie.
 13 grudnia to termin orientacyjny. Program nie kupuje i nie rezerwuje biletów.
 
@@ -35,7 +38,7 @@ Klasyfikacja wymaga ponownej weryfikacji po zmianie układu serwisu.
 
 ## Alerty
 
-Stan i historia zmian znajdują się w jednym automatycznie tworzonym GitHub Issue.
+Stan i historia zmian każdego meczu znajdują się w osobnym automatycznie tworzonym GitHub Issue.
 Pierwsza kontrola zapisuje punkt odniesienia. Kolejne komentarze pojawiają się tylko
 po zmianie stanu lub terminu. Po trzech kolejnych błędach odczytu listy pojawia się
 alert o awarii; po przywróceniu odczytu — informacja o powrocie.
