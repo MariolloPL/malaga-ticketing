@@ -14,7 +14,7 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 14
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,6 +35,11 @@ jobs:
         env:
           TARGET_MATCH: athletic
           GH_TOKEN: ${{ github.token }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      - name: Send Discord reminders
+        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
+        run: python monitor.py --remind
+        env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
       - name: Save result
         if: always()

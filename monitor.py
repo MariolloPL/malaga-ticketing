@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+import time
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -212,6 +213,23 @@ def discord(content):
         raise RuntimeError("Nie udało się dostarczyć alertu Discord") from None
 
 
+def send_reminders():
+    reminders = []
+    for path in Path(".").glob("reminder-*.json"):
+        alert = json.loads(path.read_text(encoding="utf-8"))
+        for number in (1, 2):
+            reminders.append((alert["sent_at"] + 300 * number, number, alert["content"]))
+    failed = False
+    for due, number, content in sorted(reminders):
+        time.sleep(max(0, due - time.time()))
+        try:
+            discord(f"Przypomnienie {number}/2 o wcześniejszym alercie\n\n{content}")
+        except RuntimeError as exc:
+            print(exc)
+            failed = True
+    return int(failed)
+
+
 def main():
     if datetime.now(timezone.utc).date().isoformat() > "2026-12-15":
         print("Okres monitoringu zakończony. Wyłącz workflow w Actions.")
@@ -243,6 +261,12 @@ def main():
     changed = should_alert(old, snapshot)
     if changed or new_channel:
         discord(("Monitoring Discord włączony. Aktualny stan:\n\n" if new_channel else "") + content)
+        previous = old.get("snapshot") or {}
+        appeared = snapshot.get("event") and not previous.get("event")
+        opened = snapshot["status"] in ("public", "selection") and previous.get("status") != snapshot["status"]
+        if changed and state["discord_enabled"] and (appeared or opened):
+            reminder = {"sent_at": time.time(), "content": content}
+            Path(f"reminder-{TARGET}.json").write_text(json.dumps(reminder), encoding="utf-8")
     if changed:
         gh.call("POST", f"/issues/{issue['number']}/comments", json={"body": content})
     if state != old:
@@ -254,4 +278,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--remind"]:
+        sys.exit(send_reminders())
     main()
