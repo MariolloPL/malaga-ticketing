@@ -4,16 +4,18 @@ Monitoring oficjalnej strony https://entradas.malagacf.com/ dla meczu z grudnia 
 Dodany mecz do weryfikacji: Málaga CF – Athletic Club (Bilbao), orientacyjnie
 29 listopada 2026. Oba mecze mają osobne stany, GitHub Issues i alerty Discord.
 Filtr dopasowuje nazwy drużyn; data nie jest wymagana, ponieważ może być niepotwierdzona.
-Potrzeba: 4 bilety (2 dorosłych, dzieci 6 i 8 lat), najlepiej obok siebie.
+Potrzeba: 4 bilety, najlepiej obok siebie.
 13 grudnia to termin orientacyjny. Program nie kupuje i nie rezerwuje biletów.
 
 ## Działanie
 
-GitHub Actions uruchamia kontrolę co 15 minut, o minutach 07, 22, 37 i 52 każdej godziny.
-GitHub może opóźniać harmonogram; nie jest to gwarancja alertu w ciągu 15 minut.
-W prywatnym repo uruchomienia zużywają pulę minut GitHub Actions.
-Po 15 grudnia 2026 skrypt nie odpytuje strony. Wyłącz wtedy workflow w Actions,
-żeby zatrzymać również uruchamianie runnerów.
+Jedno uruchomienie workflow trwa ok. 5,5 godziny i sprawdza stronę co 5 minut,
+a na koniec samo uruchamia następne, więc kontrola idzie bez przerwy.
+Harmonogram (cron co 15 minut) jest tylko zapasem, który wznawia pętlę, gdyby się przerwała;
+GitHub mocno opóźnia harmonogram, więc sam cron nie daje częstych kontroli.
+Pętla wymaga publicznego repo: w prywatnym zużyłaby całą pulę minut GitHub Actions.
+Athletic Club jest sprawdzany do 28 listopada 2026, Barcelona do 15 grudnia 2026.
+Po 15 grudnia pętla się nie uruchamia. Wyłącz wtedy workflow w Actions.
 
 Skrypt zachowuje cookies podczas kontroli i podąża za normalnymi przekierowaniami
 Koobin. Nie omija kolejki ani zabezpieczeń. Nie wymaga konta klubu.
