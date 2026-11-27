@@ -21,6 +21,8 @@ MATCH_NAME = MATCHES[TARGET]
 TITLE = MATCH_NAME + ": monitoring biletów"
 MARKER = "<!-- malaga-ticketing-state:" if TARGET == "barcelona" else "<!-- malaga-ticketing-athletic-state:"
 REPORT = "report.json" if TARGET == "barcelona" else "report-athletic.json"
+# Last day each match is checked (the Athletic game is played on 28/11/2026).
+END_DATES = {"barcelona": "2026-12-15", "athletic": "2026-11-28"}
 LABELS = {
     "not_listed": "Meczu nie ma jeszcze na liście sprzedaży",
     "listed": "Mecz pojawił się w ofercie; etap sprzedaży niepotwierdzony",
@@ -147,7 +149,7 @@ def message(snapshot):
         lines.append("Termin wyświetlany przez klub: " + ev["when"])
     lines.append(snapshot.get("url", URL))
     if snapshot["status"] in ("public", "selection"):
-        lines.append("Sprawdź zakup 4 biletów: 2 dorosłych + dzieci 6 i 8 lat. "
+        lines.append("Sprawdź zakup 4 biletów, najlepiej obok siebie. "
                      "Cztery miejsca obok siebie nie zostały zweryfikowane.")
     if snapshot["status"] == "error":
         lines.append("Zobacz log uruchomienia w GitHub Actions.")
@@ -213,26 +215,33 @@ def discord(content):
         raise RuntimeError("Nie udało się dostarczyć alertu Discord") from None
 
 
-def send_reminders():
-    reminders = []
-    for path in Path(".").glob("reminder-*.json"):
-        alert = json.loads(path.read_text(encoding="utf-8"))
-        for number in (1, 2):
-            reminders.append((alert["sent_at"] + 300 * number, number, alert["content"]))
+def send_reminders(wait=False):
+    """Send reminders 5 and 10 minutes after an alert; wait=True blocks until all are sent."""
     failed = False
-    for due, number, content in sorted(reminders):
-        time.sleep(max(0, due - time.time()))
-        try:
-            discord(f"Przypomnienie {number}/2 o wcześniejszym alercie\n\n{content}")
-        except RuntimeError as exc:
-            print(exc)
-            failed = True
-    return int(failed)
+    while True:
+        pending = list(Path(".").glob("reminder-*.json"))
+        for path in pending:
+            alert = json.loads(path.read_text(encoding="utf-8"))
+            alert.setdefault("sent", 0)
+            while alert["sent"] < 2 and time.time() >= alert["sent_at"] + 300 * (alert["sent"] + 1):
+                alert["sent"] += 1
+                try:
+                    discord(f"Przypomnienie {alert['sent']}/2 o wcześniejszym alercie\n\n{alert['content']}")
+                except RuntimeError as exc:
+                    print(exc)
+                    failed = True
+            if alert["sent"] >= 2:
+                path.unlink()
+            else:
+                path.write_text(json.dumps(alert), encoding="utf-8")
+        if not wait or not pending:
+            return int(failed)
+        time.sleep(15)
 
 
 def main():
-    if datetime.now(timezone.utc).date().isoformat() > "2026-12-15":
-        print("Okres monitoringu zakończony. Wyłącz workflow w Actions.")
+    if datetime.now(timezone.utc).date().isoformat() > END_DATES[TARGET]:
+        print(f"Okres monitoringu meczu {MATCH_NAME} zakończony.")
         return
     gh = GitHub()
     issue = gh.issue()
@@ -265,7 +274,7 @@ def main():
         appeared = snapshot.get("event") and not previous.get("event")
         opened = snapshot["status"] in ("public", "selection") and previous.get("status") != snapshot["status"]
         if changed and state["discord_enabled"] and (appeared or opened):
-            reminder = {"sent_at": time.time(), "content": content}
+            reminder = {"sent_at": time.time(), "sent": 0, "content": content}
             Path(f"reminder-{TARGET}.json").write_text(json.dumps(reminder), encoding="utf-8")
     if changed:
         gh.call("POST", f"/issues/{issue['number']}/comments", json={"body": content})
@@ -280,4 +289,6 @@ def main():
 if __name__ == "__main__":
     if sys.argv[1:] == ["--remind"]:
         sys.exit(send_reminders())
+    if sys.argv[1:] == ["--remind-wait"]:
+        sys.exit(send_reminders(wait=True))
     main()

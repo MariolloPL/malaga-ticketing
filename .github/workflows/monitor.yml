@@ -1,11 +1,13 @@
 name: Bilety Malaga - Barcelona
 on:
+  # Fallback only: the job below loops for ~5.5 h and then starts the next run itself.
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
 permissions:
+  actions: write
   contents: read
   issues: write
 concurrency:
@@ -14,7 +16,13 @@ concurrency:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 14
+    timeout-minutes: 355
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      INTERVAL_SECONDS: 300
+      LOOP_MINUTES: 330
+      LAST_DAY: '2026-12-15'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,23 +32,30 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
         id: tests
-      - name: Check tickets and notify
-        run: python monitor.py
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-      - name: Check Athletic Club tickets and notify
+      - name: Check tickets every 5 minutes
+        run: |
+          if [[ "$(date -u +%F)" > "$LAST_DAY" ]]; then
+            echo "Okres monitoringu zakończony. Wyłącz workflow w Actions."
+            exit 0
+          fi
+          end=$((SECONDS + LOOP_MINUTES * 60))
+          status=0
+          while :; do
+            echo "::group::Kontrola $(date -u +%H:%M) UTC"
+            python monitor.py || status=1
+            TARGET_MATCH=athletic python monitor.py || status=1
+            python monitor.py --remind || status=1
+            echo "::endgroup::"
+            (( SECONDS + INTERVAL_SECONDS < end )) || break
+            sleep "$INTERVAL_SECONDS"
+          done
+          python monitor.py --remind-wait || status=1
+          exit $status
+      - name: Start next run
         if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
-        run: python monitor.py
-        env:
-          TARGET_MATCH: athletic
-          GH_TOKEN: ${{ github.token }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-      - name: Send Discord reminders
-        if: ${{ !cancelled() && steps.tests.outcome == 'success' }}
-        run: python monitor.py --remind
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [[ "$(date -u +%F)" > "$LAST_DAY" ]]; then exit 0; fi
+          gh workflow run monitor.yml --ref "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY"
       - name: Save result
         if: always()
         uses: actions/upload-artifact@v4
